@@ -46,7 +46,7 @@ static void UART_RTOS_Callback(UART_Type *base, uart_handle_t *state, status_t s
     else if (status == kStatus_UART_RxHardwareOverrun)
     {
         /* Clear Overrun flag (OR) in UART S1 register */
-        UART_ClearStatusFlag(base, kUART_RxOverrunFlag);
+        UART_ClearStatusFlags(base, kUART_RxOverrunFlag);
         xResult =
                 xEventGroupSetBitsFromISR(handle->rxEvent, RTOS_UART_HARDWARE_BUFFER_OVERRUN, &xHigherPriorityTaskWoken);
         configASSERT(xResult == pdPASS);

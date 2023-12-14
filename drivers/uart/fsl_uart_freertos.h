@@ -131,7 +131,7 @@ int UART_RTOS_Deinit(uart_rtos_handle_t *handle);
  * @param length The number of bytes to send.
  * param xTicksToWait The number of ticks to wait for sending the data.
  */
-int UART_RTOS_Send(uart_rtos_handle_t *handle, const uint8_t *buffer, uint32_t length, , TickType_t xTicksToWait);
+int UART_RTOS_Send(uart_rtos_handle_t *handle, const uint8_t *buffer, uint32_t length, TickType_t xTicksToWait);
 
 /*!
  * @brief Receives data.
