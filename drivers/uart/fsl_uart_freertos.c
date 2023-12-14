@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015, Freescale Semiconductor, Inc.
  * Copyright 2016-2017 NXP
+ * Copyright 2018 Kristian Sloth Lauszus, Candela Technology AB
  * All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
@@ -24,24 +25,31 @@ static void UART_RTOS_Callback(UART_Type *base, uart_handle_t *state, status_t s
     xHigherPriorityTaskWoken = pdFALSE;
     xResult                  = pdFAIL;
 
+    // NOTE: The call to "xEventGroupSetBitsFromISR" will fail if the timer service queue was full, as that queue is used
+    // for sending the flags to the IDLE tasks, which will then unblock the waiting tasks.
+    // Simply increase the size of configTIMER_QUEUE_LENGTH if this error is ever triggered.
     if (status == kStatus_UART_RxIdle)
     {
         xResult = xEventGroupSetBitsFromISR(handle->rxEvent, RTOS_UART_COMPLETE, &xHigherPriorityTaskWoken);
+        configASSERT(xResult == pdPASS);
     }
-    if (status == kStatus_UART_TxIdle)
+    else if (status == kStatus_UART_TxIdle)
     {
         xResult = xEventGroupSetBitsFromISR(handle->txEvent, RTOS_UART_COMPLETE, &xHigherPriorityTaskWoken);
+        configASSERT(xResult == pdPASS);
     }
-    if (status == kStatus_UART_RxRingBufferOverrun)
+    else if (status == kStatus_UART_RxRingBufferOverrun)
     {
         xResult = xEventGroupSetBitsFromISR(handle->rxEvent, RTOS_UART_RING_BUFFER_OVERRUN, &xHigherPriorityTaskWoken);
+        configASSERT(xResult == pdPASS);
     }
-    if (status == kStatus_UART_RxHardwareOverrun)
+    else if (status == kStatus_UART_RxHardwareOverrun)
     {
         /* Clear Overrun flag (OR) in UART S1 register */
         (void)UART_ClearStatusFlags(base, kUART_RxOverrunFlag);
         xResult =
             xEventGroupSetBitsFromISR(handle->rxEvent, RTOS_UART_HARDWARE_BUFFER_OVERRUN, &xHigherPriorityTaskWoken);
+        configASSERT(xResult == pdPASS);
     }
     else
     {
@@ -149,9 +157,15 @@ int UART_RTOS_Init(uart_rtos_handle_t *handle, uart_handle_t *t_handle, const ua
 #if defined(FSL_FEATURE_UART_HAS_STOP_BIT_CONFIG_SUPPORT) && FSL_FEATURE_UART_HAS_STOP_BIT_CONFIG_SUPPORT
     defcfg.stopBitCount = cfg->stopbits;
 #endif
+#if defined(FSL_FEATURE_UART_HAS_MODEM_SUPPORT) && FSL_FEATURE_UART_HAS_MODEM_SUPPORT
+    defcfg.enableRxRTS = cfg->enableRxRTS;
+    defcfg.enableTxCTS = cfg->enableTxCTS;
+    defcfg.enableTxRTS = cfg->enableTxRTS;
+    defcfg.txRTSActiveHigh = cfg->txRTSActiveHigh;
+#endif
 
     status = UART_Init(handle->base, &defcfg, cfg->srcclk);
-    if (status != kStatus_Success)
+    if (kStatus_Success != status)
     {
         vEventGroupDelete(handle->rxEvent);
         vEventGroupDelete(handle->txEvent);
@@ -218,8 +232,9 @@ int UART_RTOS_Deinit(uart_rtos_handle_t *handle)
  * param handle The RTOS UART handle.
  * param buffer The pointer to the buffer to send.
  * param length The number of bytes to send.
+ * param xTicksToWait The number of ticks to wait for sending the data.
  */
-int UART_RTOS_Send(uart_rtos_handle_t *handle, uint8_t *buffer, uint32_t length)
+int UART_RTOS_Send(uart_rtos_handle_t *handle, const uint8_t *buffer, uint32_t length, TickType_t xTicksToWait)
 {
     EventBits_t ev;
     int retval = kStatus_Success;
@@ -239,7 +254,7 @@ int UART_RTOS_Send(uart_rtos_handle_t *handle, uint8_t *buffer, uint32_t length)
         return kStatus_InvalidArgument;
     }
 
-    if (pdFALSE == xSemaphoreTake(handle->txSemaphore, 0))
+    if (pdFALSE == xSemaphoreTake(handle->txSemaphore, xTicksToWait))
     {
         /* We could not take the semaphore, exit with 0 data received */
         return kStatus_Fail;
@@ -253,13 +268,16 @@ int UART_RTOS_Send(uart_rtos_handle_t *handle, uint8_t *buffer, uint32_t length)
     if (status != kStatus_Success)
     {
         (void)xSemaphoreGive(handle->txSemaphore);
-        return kStatus_Fail;
+        return status;
     }
 
-    ev = xEventGroupWaitBits(handle->txEvent, RTOS_UART_COMPLETE, pdTRUE, pdFALSE, portMAX_DELAY);
+    ev = xEventGroupWaitBits(handle->txEvent, RTOS_UART_COMPLETE, pdTRUE, pdFALSE, xTicksToWait);
     if ((ev & RTOS_UART_COMPLETE) == 0U)
     {
-        retval = kStatus_Fail;
+        retval = kStatus_Timeout;
+        UART_TransferAbortSend(handle->base, handle->t_state); // Stop data transfer to application
+        // Prevent false indication of successful transfer in next call of UART_RTOS_Send. RTOS_UART_COMPLETE flag could be set meanwhile overrun is handled
+        (void)xEventGroupClearBits(handle->txEvent, RTOS_UART_COMPLETE);
     }
 
     if (pdFALSE == xSemaphoreGive(handle->txSemaphore))
@@ -287,8 +305,9 @@ int UART_RTOS_Send(uart_rtos_handle_t *handle, uint8_t *buffer, uint32_t length)
  * param buffer The pointer to the buffer to write received data.
  * param length The number of bytes to receive.
  * param received The pointer to a variable of size_t where the number of received data is filled.
+ * param xTicksToWait The number of ticks to wait for receiving the data.
  */
-int UART_RTOS_Receive(uart_rtos_handle_t *handle, uint8_t *buffer, uint32_t length, size_t *received)
+int UART_RTOS_Receive(uart_rtos_handle_t *handle, uint8_t *buffer, uint32_t length, size_t *received, TickType_t xTicksToWait)
 {
     EventBits_t ev;
     size_t n              = 0;
@@ -315,7 +334,7 @@ int UART_RTOS_Receive(uart_rtos_handle_t *handle, uint8_t *buffer, uint32_t leng
     }
 
     /* New transfer can be performed only after current one is finished */
-    if (pdFALSE == xSemaphoreTake(handle->rxSemaphore, portMAX_DELAY))
+    if (pdFALSE == xSemaphoreTake(handle->rxSemaphore, xTicksToWait))
     {
         /* We could not take the semaphore, exit with 0 data received */
         return kStatus_Fail;
@@ -329,12 +348,12 @@ int UART_RTOS_Receive(uart_rtos_handle_t *handle, uint8_t *buffer, uint32_t leng
     if (status != kStatus_Success)
     {
         (void)xSemaphoreGive(handle->rxSemaphore);
-        return kStatus_Fail;
+        return status;
     }
 
     ev = xEventGroupWaitBits(handle->rxEvent,
                              RTOS_UART_COMPLETE | RTOS_UART_RING_BUFFER_OVERRUN | RTOS_UART_HARDWARE_BUFFER_OVERRUN,
-                             pdTRUE, pdFALSE, portMAX_DELAY);
+                             pdTRUE, pdFALSE, xTicksToWait);
     if ((ev & RTOS_UART_HARDWARE_BUFFER_OVERRUN) != 0U)
     {
         /* Stop data transfer to application buffer, ring buffer is still active */
@@ -343,7 +362,7 @@ int UART_RTOS_Receive(uart_rtos_handle_t *handle, uint8_t *buffer, uint32_t leng
            RTOS_UART_COMPLETE flag could be set meanwhile overrun is handled */
         (void)xEventGroupClearBits(handle->rxEvent, RTOS_UART_COMPLETE);
         retval         = kStatus_UART_RxHardwareOverrun;
-        local_received = 0;
+        local_received = n;
     }
     else if ((ev & RTOS_UART_RING_BUFFER_OVERRUN) != 0U)
     {
@@ -353,7 +372,7 @@ int UART_RTOS_Receive(uart_rtos_handle_t *handle, uint8_t *buffer, uint32_t leng
            RTOS_UART_COMPLETE flag could be set meanwhile overrun is handled */
         (void)xEventGroupClearBits(handle->rxEvent, RTOS_UART_COMPLETE);
         retval         = kStatus_UART_RxRingBufferOverrun;
-        local_received = 0;
+        local_received = n;
     }
     else if ((ev & RTOS_UART_COMPLETE) != 0U)
     {
@@ -362,8 +381,13 @@ int UART_RTOS_Receive(uart_rtos_handle_t *handle, uint8_t *buffer, uint32_t leng
     }
     else
     {
-        retval         = kStatus_UART_Error;
-        local_received = 0;
+        /* Stop data transfer to application buffer, ring buffer is still active */
+        UART_TransferAbortReceive(handle->base, handle->t_state);
+        /* Prevent false indication of successful transfer in next call of UART_RTOS_Receive.
+           RTOS_UART_COMPLETE flag could be set meanwhile overrun is handled */
+        (void)xEventGroupClearBits(handle->rxEvent, RTOS_UART_COMPLETE);
+        retval         = kStatus_Timeout;
+        local_received = n;
     }
 
     /* Prevent repetitive NULL check */

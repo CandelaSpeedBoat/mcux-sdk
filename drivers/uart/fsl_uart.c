@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015-2016, Freescale Semiconductor, Inc.
  * Copyright 2016-2021 NXP
+ * Copyright 2017 Kristian Sloth Lauszus, Candela Technology AB
  * All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
@@ -318,16 +319,32 @@ status_t UART_Init(UART_Type *base, const uart_config_t *config, uint32_t srcClo
     base->CFIFO |= (UART_CFIFO_TXFLUSH_MASK | UART_CFIFO_RXFLUSH_MASK);
 #endif
 #if defined(FSL_FEATURE_UART_HAS_MODEM_SUPPORT) && FSL_FEATURE_UART_HAS_MODEM_SUPPORT
+    /* Enable RTS and CTS base on configure structure. */
+    temp = base->MODEM;
+
     if (config->enableRxRTS)
     {
         /* Enable receiver RTS(request-to-send) function. */
-        base->MODEM |= UART_MODEM_RXRTSE_MASK;
+        temp |= UART_MODEM_RXRTSE_MASK;
     }
     if (config->enableTxCTS)
     {
         /* Enable transmitter CTS(clear-to-send) function. */
-        base->MODEM |= UART_MODEM_TXCTSE_MASK;
+        temp |= UART_MODEM_TXCTSE_MASK;
     }
+    if (config->enableTxRTS)
+    {
+        assert(config->enableTx); // TX has to be enabled as well
+
+        temp |= UART_MODEM_TXRTSE_MASK;
+
+        if (config->txRTSActiveHigh)
+        {
+            temp |= UART_MODEM_TXRTSPOL_MASK;
+        }
+    }
+
+    base->MODEM = temp;
 #endif
 
     /* Enable TX/RX base on configure structure. */
@@ -391,6 +408,10 @@ void UART_Deinit(UART_Type *base)
  *   uartConfig->idleType = kUART_IdleTypeStartBit;
  *   uartConfig->enableTx = false;
  *   uartConfig->enableRx = false;
+ *   uartConfig->enableRxRTS = false;
+ *   uartConfig->enableTxCTS = false;
+ *   uartConfig->enableTxRTS = false;
+ *   uartConfig->txRTSActiveHigh = false;
  *
  * param config Pointer to configuration structure.
  */
@@ -413,6 +434,8 @@ void UART_GetDefaultConfig(uart_config_t *config)
 #if defined(FSL_FEATURE_UART_HAS_MODEM_SUPPORT) && FSL_FEATURE_UART_HAS_MODEM_SUPPORT
     config->enableRxRTS = false;
     config->enableTxCTS = false;
+    config->enableTxRTS = false;
+    config->txRTSActiveHigh = false;
 #endif
     config->idleType = kUART_IdleTypeStartBit;
     config->enableTx = false;

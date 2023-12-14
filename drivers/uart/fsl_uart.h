@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015-2016, Freescale Semiconductor, Inc.
  * Copyright 2016-2021 NXP
+ * Copyright 2017 Kristian Sloth Lauszus, Candela
  * All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
@@ -168,6 +169,8 @@ typedef struct _uart_config
 #if defined(FSL_FEATURE_UART_HAS_MODEM_SUPPORT) && FSL_FEATURE_UART_HAS_MODEM_SUPPORT
     bool enableRxRTS; /*!< RX RTS enable */
     bool enableTxCTS; /*!< TX CTS enable */
+    bool enableTxRTS; /*!< TX RTS enable */
+    bool txRTSActiveHigh; /*!< TX RTS polarity */
 #endif
     uart_idle_type_select_t idleType; /*!< IDLE type select. */
     bool enableTx;                    /*!< Enable TX */
@@ -301,6 +304,10 @@ void UART_Deinit(UART_Type *base);
  *   uartConfig->idleType = kUART_IdleTypeStartBit;
  *   uartConfig->enableTx = false;
  *   uartConfig->enableRx = false;
+ *   uartConfig->enableRxRTS = false;
+ *   uartConfig->enableTxCTS = false;
+ *   uartConfig->enableTxRTS = false;
+ *   uartConfig->txRTSActiveHigh = false;
  *
  * @param config Pointer to configuration structure.
  */
