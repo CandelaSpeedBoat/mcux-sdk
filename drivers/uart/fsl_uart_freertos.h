@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015, Freescale Semiconductor, Inc.
  * Copyright 2016-2020 NXP
+ * Copyright 2018 Kristian Sloth Lauszus, Candela Technology AB
  * All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
@@ -36,6 +37,12 @@ typedef struct _uart_rtos_config
     uint32_t baudrate;              /*!< Desired communication speed */
     uart_parity_mode_t parity;      /*!< Parity setting */
     uart_stop_bit_count_t stopbits; /*!< Number of stop bits to use */
+#if defined(FSL_FEATURE_UART_HAS_MODEM_SUPPORT) && FSL_FEATURE_UART_HAS_MODEM_SUPPORT
+    bool enableRxRTS;               /*!< RX RTS enable */
+    bool enableTxCTS;               /*!< TX CTS enable */
+    bool enableTxRTS;               /*!< TX RTS enable */
+    bool txRTSActiveHigh;           /*!< TX RTS polarity */
+#endif
     uint8_t *buffer;                /*!< Buffer for background reception */
     uint32_t buffer_size;           /*!< Size of buffer for background reception */
 } uart_rtos_config_t;
@@ -122,8 +129,9 @@ int UART_RTOS_Deinit(uart_rtos_handle_t *handle);
  * @param handle The RTOS UART handle.
  * @param buffer The pointer to the buffer to send.
  * @param length The number of bytes to send.
+ * param xTicksToWait The number of ticks to wait for sending the data.
  */
-int UART_RTOS_Send(uart_rtos_handle_t *handle, uint8_t *buffer, uint32_t length);
+int UART_RTOS_Send(uart_rtos_handle_t *handle, const uint8_t *buffer, uint32_t length, , TickType_t xTicksToWait);
 
 /*!
  * @brief Receives data.
@@ -135,8 +143,9 @@ int UART_RTOS_Send(uart_rtos_handle_t *handle, uint8_t *buffer, uint32_t length)
  * @param buffer The pointer to the buffer to write received data.
  * @param length The number of bytes to receive.
  * @param received The pointer to a variable of size_t where the number of received data is filled.
+ * @param xTicksToWait The number of ticks to wait for receiving the data.
  */
-int UART_RTOS_Receive(uart_rtos_handle_t *handle, uint8_t *buffer, uint32_t length, size_t *received);
+int UART_RTOS_Receive(uart_rtos_handle_t *handle, uint8_t *buffer, uint32_t length, size_t *received, TickType_t xTicksToWait);
 
 /* @} */
 

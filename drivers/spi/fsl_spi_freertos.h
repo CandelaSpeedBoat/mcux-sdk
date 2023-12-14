@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015, Freescale Semiconductor, Inc.
  * Copyright 2016-2020 NXP
+ * Copyright 2023 Kristian Sloth Lauszus, Candela Technology AB
  * All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
@@ -37,7 +38,7 @@ typedef struct _spi_rtos_handle
 {
     SPI_Type *base;                 /*!< SPI base address */
     spi_master_handle_t drv_handle; /*!< Handle of the underlying driver, treated as opaque by the RTOS layer */
-    status_t async_status;          /*!< Transactional state of the underlying driver */
+    volatile status_t async_status; /*!< Transactional state of the underlying driver */
     SemaphoreHandle_t mutex;        /*!< Mutex to lock the handle during a trasfer */
     SemaphoreHandle_t event;        /*!< Semaphore to notify and unblock task when transfer ends */
 #if (configSUPPORT_STATIC_ALLOCATION == 1)

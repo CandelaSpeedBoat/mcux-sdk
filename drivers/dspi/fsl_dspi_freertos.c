@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015, Freescale Semiconductor, Inc.
  * Copyright 2016-2017 NXP
+ * Copyright 2021 Kristian Sloth Lauszus, Candela Technology AB
  * All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
@@ -123,6 +124,7 @@ status_t DSPI_RTOS_Transfer(dspi_rtos_handle_t *handle, dspi_transfer_t *transfe
     /* Wait for transfer to finish */
     if (xSemaphoreTake(handle->event, portMAX_DELAY) != pdTRUE)
     {
+        (void)xSemaphoreGive(handle->mutex);
         return kStatus_DSPI_Error;
     }
 

@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015, Freescale Semiconductor, Inc.
  * Copyright 2016-2020 NXP
+ * Copyright 2023 Kristian Sloth Lauszus, Candela Technology AB
  * All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
@@ -34,7 +35,7 @@ typedef struct _i2c_rtos_handle
 {
     I2C_Type *base;                 /*!< I2C base address */
     i2c_master_handle_t drv_handle; /*!< A handle of the underlying driver, treated as opaque by the RTOS layer */
-    status_t async_status;          /*!< Transactional state of the underlying driver */
+    volatile status_t async_status; /*!< Transactional state of the underlying driver */
     SemaphoreHandle_t mutex;        /*!< A mutex to lock the handle during a transfer */
     SemaphoreHandle_t semaphore;    /*!< A semaphore to notify and unblock task when the transfer ends */
 #if (configSUPPORT_STATIC_ALLOCATION == 1)
