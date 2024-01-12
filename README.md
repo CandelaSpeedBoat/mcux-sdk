@@ -1,3 +1,11 @@
+# MCUXpresso SDK - Candela branch
+
+This branch is a reduced version of master with all files that are not needed in GCU repos removed.
+
+To update from upstream:
+- pull upstream master to master on https://github.com/CandelaSpeedBoat/mcux-sdk/
+- merge master to candela branch
+
 # MCUXpresso SDK: mcux-sdk
 
 ![NXP_logo](docs/nxp_logo_small.png)[EN](./README.md)|[中文](./README_CN.md)
